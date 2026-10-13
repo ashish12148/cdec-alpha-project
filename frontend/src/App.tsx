@@ -1,80 +1,159 @@
-import { useState } from "react";
+ import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import "./App.css";
 
-type Course = {
+type ApiCourse = {
   id: number;
-  title: string;
+  name: string;
   category: string;
+};
+
+type Course = ApiCourse & {
   description: string;
   level: string;
   duration: string;
 };
 
-const courses: Course[] = [
-  {
-    id: 1,
-    title: "AWS Cloud Fundamentals",
-    category: "Cloud Computing",
-    description: "Learn cloud computing, AWS services and cloud infrastructure.",
+type Enrollment = {
+  id: number;
+  name: string;
+  email: string;
+  course: string;
+  status: string;
+};
+
+const API_URL = "http://localhost:8080/api";
+
+const courseDetails: Record<
+  number,
+  { description: string; level: string; duration: string }
+> = {
+  1: {
+    description:
+      "Learn AWS cloud services, infrastructure and cloud computing fundamentals.",
     level: "Beginner",
     duration: "4 weeks",
   },
-  {
-    id: 2,
-    title: "Docker & Containers",
-    category: "DevOps",
-    description: "Understand Docker images, containers and container workflows.",
+  2: {
+    description:
+      "Learn Docker images, containers and container management.",
     level: "Beginner",
     duration: "3 weeks",
   },
-  {
-    id: 3,
-    title: "Kubernetes Essentials",
-    category: "DevOps",
-    description: "Explore pods, deployments, services and container orchestration.",
+  3: {
+    description:
+      "Understand Kubernetes pods, deployments and services.",
     level: "Intermediate",
     duration: "5 weeks",
   },
-  {
-    id: 4,
-    title: "Java Spring Boot",
-    category: "Development",
-    description: "Build backend APIs using Java and Spring Boot.",
-    level: "Intermediate",
-    duration: "6 weeks",
-  },
-  {
-    id: 5,
-    title: "Terraform & AWS",
-    category: "Infrastructure",
-    description: "Learn infrastructure as code and cloud resource automation.",
+  4: {
+    description:
+      "Automate cloud infrastructure using Terraform and AWS.",
     level: "Intermediate",
     duration: "4 weeks",
   },
-  {
-    id: 6,
-    title: "CI/CD with Jenkins",
-    category: "DevOps",
-    description: "Learn how automated build and deployment pipelines work.",
+  5: {
+    description:
+      "Build automated CI/CD pipelines using Jenkins.",
     level: "Beginner",
     duration: "3 weeks",
+  },
+};
+
+const fallbackCourses: Course[] = [
+  {
+    id: 1,
+    name: "AWS Cloud Fundamentals",
+    category: "Cloud",
+    ...courseDetails[1],
+  },
+  {
+    id: 2,
+    name: "Docker & Containers",
+    category: "DevOps",
+    ...courseDetails[2],
+  },
+  {
+    id: 3,
+    name: "Kubernetes Essentials",
+    category: "DevOps",
+    ...courseDetails[3],
+  },
+  {
+    id: 4,
+    name: "Terraform & AWS",
+    category: "Cloud",
+    ...courseDetails[4],
+  },
+  {
+    id: 5,
+    name: "CI/CD with Jenkins",
+    category: "DevOps",
+    ...courseDetails[5],
   },
 ];
 
 function App() {
+  const [courses, setCourses] = useState<Course[]>(fallbackCourses);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [enrolled, setEnrolled] = useState<number[]>([]);
+  const [apiStatus, setApiStatus] = useState(
+    "Connecting to backend..."
+  );
+
+  const [selectedCourse, setSelectedCourse] =
+    useState<Course | null>(null);
+  const [studentName, setStudentName] = useState("");
+  const [studentEmail, setStudentEmail] = useState("");
+  const [enrollmentMessage, setEnrollmentMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/courses`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load courses");
+        }
+
+        return response.json() as Promise<ApiCourse[]>;
+      })
+      .then((data) => {
+        const mappedCourses: Course[] = data.map((item) => ({
+          ...item,
+          ...(courseDetails[item.id] ?? {
+            description:
+              "Explore this course and develop practical skills.",
+            level: "Beginner",
+            duration: "4 weeks",
+          }),
+        }));
+
+        setCourses(mappedCourses);
+        setApiStatus("Connected to Java Spring Boot");
+      })
+      .catch(() => {
+        setApiStatus(
+          "Backend unavailable — showing demo courses"
+        );
+      });
+  }, []);
 
   const categories = [
     "All",
-    ...new Set(courses.map((course) => course.category)),
+    ...Array.from(
+      new Set(courses.map((course) => course.category))
+    ),
   ];
 
   const filteredCourses = courses.filter((course) => {
+    const searchText = search.toLowerCase();
+
     const matchesSearch =
-      course.title.toLowerCase().includes(search.toLowerCase()) ||
-      course.description.toLowerCase().includes(search.toLowerCase());
+      course.name.toLowerCase().includes(searchText) ||
+      course.category.toLowerCase().includes(searchText) ||
+      course.description.toLowerCase().includes(searchText);
 
     const matchesCategory =
       category === "All" || course.category === category;
@@ -82,188 +161,345 @@ function App() {
     return matchesSearch && matchesCategory;
   });
 
-  function enroll(courseId: number) {
-    setEnrolled((previous) =>
-      previous.includes(courseId)
-        ? previous
-        : [...previous, courseId]
-    );
+  function handleEnroll(course: Course) {
+    setSelectedCourse(course);
+    setStudentName("");
+    setStudentEmail("");
+    setEnrollmentMessage("");
+  }
+
+  async function submitEnrollment(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!selectedCourse) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setEnrollmentMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/enrollments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: studentName.trim(),
+          email: studentEmail.trim(),
+          course: selectedCourse.name,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Enrollment request failed");
+      }
+
+      const data: Enrollment = await response.json();
+
+      setEnrollments((previous) => [...previous, data]);
+
+      setEnrolled((previous) =>
+        previous.includes(selectedCourse.id)
+          ? previous
+          : [...previous, selectedCourse.id]
+      );
+
+      setEnrollmentMessage(
+        `Successfully enrolled in ${data.course}! Your Enrollment ID is ${data.id}.`
+      );
+
+      setSelectedCourse(null);
+      setStudentName("");
+      setStudentEmail("");
+    } catch {
+      setEnrollmentMessage(
+        "Enrollment failed. Please check that the backend is running and try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <div className="app">
-      <header className="navbar">
-        <a className="brand" href="#">
-          <span className="brand-icon">C</span>
-          CloudBlitz
+      <nav className="navbar">
+        <a href="#home" className="logo">
+          Cloud<span>Blitz</span>
         </a>
 
-        <nav>
-          <a href="#courses">Explore Courses</a>
+        <div className="nav-links">
+          <a href="#home">Home</a>
+          <a href="#courses">Courses</a>
           <a href="#about">About</a>
-        </nav>
+        </div>
 
         <a className="nav-button" href="#courses">
-          Start Learning
+          Explore Courses
         </a>
-      </header>
+      </nav>
 
       <main>
-        <section className="hero">
+        <section className="hero" id="home">
           <div className="hero-content">
-            <span className="eyebrow">YOUR LEARNING JOURNEY STARTS HERE</span>
+            <p className="eyebrow">YOUR FUTURE STARTS HERE</p>
 
             <h1>
-              Build skills.
+              Learn Skills.
               <br />
-              <span>Build your future.</span>
+              Build Your <span>Future.</span>
             </h1>
 
-            <p>
-              Learn Cloud Computing, DevOps and Software Development
-              with courses designed to help you grow.
+            <p className="hero-description">
+              Master cloud computing, DevOps and software development
+              with practical courses designed to help you grow your
+              career.
             </p>
 
-            <a className="primary-button" href="#courses">
-              Explore Courses →
-            </a>
+            <div className="hero-actions">
+              <a className="primary-button" href="#courses">
+                Explore Courses →
+              </a>
+
+              <a className="secondary-button" href="#about">
+                Learn More
+              </a>
+            </div>
 
             <div className="hero-stats">
               <div>
                 <strong>{courses.length}+</strong>
-                <span>Learning Courses</span>
+                <span>Courses</span>
               </div>
+
               <div>
-                <strong>3</strong>
-                <span>Learning Categories</span>
+                <strong>{categories.length - 1}</strong>
+                <span>Categories</span>
               </div>
+
               <div>
-                <strong>24/7</strong>
-                <span>Learn at Your Pace</span>
+                <strong>100%</strong>
+                <span>Career Focused</span>
               </div>
             </div>
           </div>
 
           <div className="hero-card">
-            <div className="card-top">
-              <span>YOUR NEXT SKILL</span>
-              <span className="status-dot">●</span>
-            </div>
+            <div className="hero-card-icon">☁️</div>
+            <h2>Build. Deploy. Grow.</h2>
+            <p>
+              Your journey into cloud and DevOps begins here.
+            </p>
 
-            <div className="learning-icon">☁️</div>
-            <h2>Cloud & DevOps</h2>
-            <p>Turn your curiosity into practical skills.</p>
-
-            <div className="progress-label">
-              <span>Learning journey</span>
-              <span>Ready to start</span>
-            </div>
-
-            <div className="progress-bar">
-              <div />
+            <div className="technology-list">
+              <span>AWS</span>
+              <span>Docker</span>
+              <span>Kubernetes</span>
+              <span>Terraform</span>
+              <span>Jenkins</span>
             </div>
           </div>
         </section>
 
         <section className="courses-section" id="courses">
           <div className="section-heading">
-            <div>
-              <span className="eyebrow">LEARN SOMETHING NEW</span>
-              <h2>Explore our courses</h2>
-              <p>Choose a course and start building your skills.</p>
-            </div>
-
-            <span className="course-count">
-              {filteredCourses.length} courses available
-            </span>
+            <p className="eyebrow">START LEARNING TODAY</p>
+            <h2>Explore Our Courses</h2>
+            <p>
+              Discover practical learning paths for cloud, DevOps and
+              modern infrastructure.
+            </p>
           </div>
 
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Search courses..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <p className="api-status">
+            <span className="status-dot"></span>
+            {apiStatus}
+          </p>
 
-          <div className="category-list">
-            {categories.map((item) => (
-              <button
-                key={item}
-                className={category === item ? "category active" : "category"}
-                onClick={() => setCategory(item)}
-              >
-                {item}
-              </button>
+          <div className="course-controls">
+            <input
+              type="search"
+              placeholder="Search courses..."
+              aria-label="Search courses"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+
+            <div className="category-filters">
+              {categories.map((item) => (
+                <button
+                  type="button"
+                  key={item}
+                  className={
+                    category === item ? "filter active" : "filter"
+                  }
+                  onClick={() => setCategory(item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {selectedCourse && (
+            <div className="enrollment-form-container">
+              <h3>Enroll in {selectedCourse.name}</h3>
+
+              <form onSubmit={submitEnrollment}>
+                <label htmlFor="student-name">Full Name</label>
+
+                <input
+                  id="student-name"
+                  type="text"
+                  value={studentName}
+                  onChange={(event) =>
+                    setStudentName(event.target.value)
+                  }
+                  placeholder="Enter your full name"
+                  required
+                />
+
+                <label htmlFor="student-email">
+                  Email Address
+                </label>
+
+                <input
+                  id="student-email"
+                  type="email"
+                  value={studentEmail}
+                  onChange={(event) =>
+                    setStudentEmail(event.target.value)
+                  }
+                  placeholder="Enter your email"
+                  required
+                />
+
+                <button type="submit" disabled={isSubmitting}>
+                  {isSubmitting
+                    ? "Submitting..."
+                    : "Confirm Enrollment"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedCourse(null)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+              </form>
+            </div>
+          )}
+
+          {enrollmentMessage && (
+            <p role="status" aria-live="polite">
+              {enrollmentMessage}
+            </p>
+          )}
+
+          <div className="course-grid">
+            {filteredCourses.map((course) => (
+              <article className="course-card" key={course.id}>
+                <div className="course-card-top">
+                  <span className="course-category">
+                    {course.category}
+                  </span>
+
+                  <span className="course-icon">
+                    {course.id === 1
+                      ? "☁️"
+                      : course.id === 2
+                        ? "🐳"
+                        : course.id === 3
+                          ? "⚙️"
+                          : course.id === 4
+                            ? "🏗️"
+                            : "🔄"}
+                  </span>
+                </div>
+
+                <h3>{course.name}</h3>
+
+                <p className="course-description">
+                  {course.description}
+                </p>
+
+                <div className="course-meta">
+                  <span>📊 {course.level}</span>
+                  <span>🕒 {course.duration}</span>
+                </div>
+
+                <button
+                  type="button"
+                  className={
+                    enrolled.includes(course.id)
+                      ? "enroll-button enrolled"
+                      : "enroll-button"
+                  }
+                  onClick={() => {
+  console.log("Enroll button clicked:", course.name);
+  handleEnroll(course);
+}}
+                >
+                  {enrolled.includes(course.id)
+                    ? "Enroll Again →"
+                    : "Enroll Now →"}
+                </button>
+              </article>
             ))}
           </div>
 
-          <div className="course-grid">
-            {filteredCourses.map((course) => {
-              const isEnrolled = enrolled.includes(course.id);
-
-              return (
-                <article className="course-card" key={course.id}>
-                  <div className="course-card-top">
-                    <span className="course-category">{course.category}</span>
-                    <span className="course-symbol">
-                      {course.id === 1
-                        ? "☁️"
-                        : course.id === 2
-                          ? "🐳"
-                          : course.id === 3
-                            ? "☸️"
-                            : course.id === 4
-                              ? "☕"
-                              : course.id === 5
-                                ? "🏗️"
-                                : "⚙️"}
-                    </span>
-                  </div>
-
-                  <h3>{course.title}</h3>
-                  <p>{course.description}</p>
-
-                  <div className="course-meta">
-                    <span>{course.level}</span>
-                    <span>{course.duration}</span>
-                  </div>
-
-                  <button
-                    className={isEnrolled ? "enroll-button enrolled" : "enroll-button"}
-                    onClick={() => enroll(course.id)}
-                    disabled={isEnrolled}
-                  >
-                    {isEnrolled ? "✓ Enrolled" : "Enroll Now →"}
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-
           {filteredCourses.length === 0 && (
-            <p className="empty-state">
-              No courses found. Try another search.
-            </p>
+            <div className="empty-state">
+              <h3>No courses found</h3>
+              <p>Try another search term or category.</p>
+            </div>
+          )}
+
+          {enrollments.length > 0 && (
+            <div className="enrollment-summary">
+              <h3>Your Enrollments This Session</h3>
+
+              {enrollments.map((item) => (
+                <p key={item.id}>
+                  {item.name} — {item.course} — {item.status}
+                  {" (ID: "}
+                  {item.id}
+                  {")"}
+                </p>
+              ))}
+            </div>
           )}
         </section>
 
         <section className="about-section" id="about">
-          <span className="eyebrow">ABOUT CLOUDBLITZ</span>
-          <h2>Your next opportunity starts with learning.</h2>
+          <p className="eyebrow">ABOUT CLOUDBLITZ</p>
+          <h2>Learn Today. Lead Tomorrow.</h2>
+
           <p>
-            CloudBlitz is a learning platform project built to explore
-            modern frontend development, backend APIs and DevOps practices.
+            CloudBlitz helps learners develop practical skills in cloud
+            computing, DevOps tools and modern software development.
+            Learn the fundamentals and build your technical career.
           </p>
+
+          <a className="primary-button" href="#courses">
+            Start Learning →
+          </a>
         </section>
       </main>
 
-      <footer>
-        <a className="brand" href="#">
-          <span className="brand-icon">C</span>
-          CloudBlitz
+      <footer className="footer">
+        <a href="#home" className="logo">
+          Cloud<span>Blitz</span>
         </a>
-        <p>Learn today. Build tomorrow.</p>
+
+        <p>Learn. Build. Deploy. Grow.</p>
+
+        <p>
+          © {new Date().getFullYear()} CloudBlitz Learning Platform
+        </p>
       </footer>
     </div>
   );

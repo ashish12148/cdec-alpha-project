@@ -4,3 +4,14 @@ dist/
 .env.*
 !.env.example
 .DS_Store
+
+# Java Spring Boot
+backend/target/
+backend/data/
+
+# Error logs
+backend/error.txt
+backend/error-log.txt
+
+# Backend ZIP
+backend.zip
