@@ -3,8 +3,8 @@ services:
     build: ./backend
     image: cdec-backend:latest
     container_name: cdec-backend
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     volumes:
       - h2-data:/app/data
     restart: unless-stopped
