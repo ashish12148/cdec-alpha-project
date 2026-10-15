@@ -21,9 +21,7 @@ type Enrollment = {
   course: string;
   status: string;
 };
-
-const API_URL = "http://localhost:8080/api";
-
+const API_URL = "/api";
 const courseDetails: Record<
   number,
   { description: string; level: string; duration: string }

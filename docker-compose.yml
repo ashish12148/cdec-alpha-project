@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    image: cdec-backend:latest
+    container_name: cdec-backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - h2-data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: cdec-frontend:latest
+    container_name: cdec-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  h2-data:
